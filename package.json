@@ -1,0 +1,10 @@
+{
+  "name": "cricket-platform",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Cricket Live Score App + Website (Cricbuzz-style)",
+  "scripts": {
+    "start": "node start-all.js",
+    "dev": "node start-all.js"
+  }
+}

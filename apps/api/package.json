@@ -1,0 +1,26 @@
+{
+  "name": "@cricket/api",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Cricket Live Score Express REST API + Socket.IO Server",
+  "main": "src/server.ts",
+  "scripts": {
+    "start": "node --experimental-strip-types src/server.ts",
+    "dev": "node --experimental-strip-types --watch-path=src --watch src/server.ts"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "socket.io": "^4.7.5",
+    "pg": "^8.11.5",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "@types/pg": "^8.11.5",
+    "@types/uuid": "^9.0.8"
+  }
+}
