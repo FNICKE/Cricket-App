@@ -39,7 +39,7 @@ interface PlayerRegistration {
 }
 
 interface PlayerLoginPageProps {
-  onLoginSuccess: (player: PlayerRegistration) => void;
+  onLoginSuccess: (player: PlayerRegistration, token: string) => void;
   onContinueAsViewer: () => void;
   onNavigateToRegister: () => void;
 }
@@ -52,7 +52,7 @@ export default function PlayerLoginPage({
   onNavigateToRegister
 }: PlayerLoginPageProps) {
   const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('123456');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -81,40 +81,12 @@ export default function PlayerLoginPage({
         return;
       }
 
-      onLoginSuccess(data.player);
+      onLoginSuccess(data.player, data.token);
     } catch (err: any) {
       setErrorMessage(err.message || 'Unable to connect to server. Ensure API is running on :4000.');
     } finally {
       setLoading(false);
     }
-  };
-
-  // Demo Quick-Login shortcut handler
-  const handleQuickLogin = (idOrEmail: string) => {
-    setIdentifier(idOrEmail);
-    setPassword('123456');
-    setErrorMessage('');
-    // Auto-trigger login
-    setTimeout(async () => {
-      try {
-        setLoading(true);
-        const res = await fetch(`${API_BASE}/players/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: idOrEmail, password: '123456' })
-        });
-        const data = await res.json();
-        if (data.success && data.player) {
-          onLoginSuccess(data.player);
-        } else {
-          setErrorMessage(data.message || 'Could not log in with demo account.');
-        }
-      } catch (err: any) {
-        setErrorMessage('Quick login failed. Server connection error.');
-      } finally {
-        setLoading(false);
-      }
-    }, 100);
   };
 
   return (
@@ -349,7 +321,7 @@ export default function PlayerLoginPage({
               Registered Player Login
             </h2>
             <p style={{ color: '#64748b', fontSize: '0.875rem', lineHeight: 1.6, marginBottom: '1.25rem' }}>
-              Sign in with your Membership ID, Email, or Mobile to see your 1-year subscription status, kit sizes, and digital pass.
+              Sign in with your Membership ID, Email, or Mobile and the password you set during registration.
             </p>
 
             {/* Error Banner */}
@@ -403,14 +375,15 @@ export default function PlayerLoginPage({
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>
-                  Passcode / PIN
+                  Password
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter 6-digit PIN (default: 123456)"
+                    placeholder="Password set during registration"
+                    minLength={12}
                     required
                     style={{
                       width: '100%',
@@ -482,71 +455,6 @@ export default function PlayerLoginPage({
               </button>
             </form>
 
-            {/* Quick Demo Logins for Instant Testing */}
-            <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px dashed #e2e8f0' }}>
-              <div style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.05em' }}>
-                ⚡ 1-Click Demo Accounts:
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('CRIC-2026-0101')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    backgroundColor: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    fontSize: '0.75rem',
-                    color: '#334155',
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
-                    <span style={{ fontWeight: 700 }}>Rohit Verma</span>
-                    <span style={{ color: '#64748b' }}>(CRIC-2026-0101)</span>
-                  </div>
-                  <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#047857', backgroundColor: '#ecfdf5', padding: '1px 6px', borderRadius: '4px' }}>
-                    Active (305d)
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('CRIC-2025-0045')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    backgroundColor: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    fontSize: '0.75rem',
-                    color: '#334155',
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }}></span>
-                    <span style={{ fontWeight: 700 }}>Sameer Khan</span>
-                    <span style={{ color: '#64748b' }}>(CRIC-2025-0045)</span>
-                  </div>
-                  <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#b91c1c', backgroundColor: '#fef2f2', padding: '1px 6px', borderRadius: '4px' }}>
-                    Expired Pass
-                  </span>
-                </button>
-              </div>
-            </div>
           </div>
 
           <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>

@@ -272,8 +272,8 @@ INSERT INTO articles (title, slug, body, excerpt, hero_image, author_name, statu
 -- 15. ADMIN & SCORER USERS
 -- Default passwords: 'Password123!' (bcrypt hash)
 INSERT INTO admin_users (email, password_hash, full_name, role, is_active) VALUES
-('admin@cricket.local', '$2b$10$w099/z7l02yWJ.mY2V8X3eeH6K3GzM9Fw4yGfLp6MlhYyvK1Y97C6', 'Super Administrator', 'super_admin', true),
-('scorer@cricket.local', '$2b$10$w099/z7l02yWJ.mY2V8X3eeH6K3GzM9Fw4yGfLp6MlhYyvK1Y97C6', 'Official Match Scorer', 'scorer', true);
+('admin@cricket.local', '$2b$12$HpCapU4C2gC3pNx/UUOi0.hOTa4BwHKWdp0cVPnKaFE1T8g3wwjVK', 'Super Administrator', 'super_admin', true),
+('scorer@cricket.local', '$2b$12$HpCapU4C2gC3pNx/UUOi0.hOTa4BwHKWdp0cVPnKaFE1T8g3wwjVK', 'Official Match Scorer', 'scorer', true);
 
 -- Assign scorer to live match 1
 INSERT INTO match_scorers (match_id, user_id) VALUES

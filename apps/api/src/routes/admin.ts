@@ -4,14 +4,21 @@ import {
   undoLastScoredBall,
   swapMatchStrike,
   setMatchBowler,
-  refreshMatchSnapshot
+  refreshMatchSnapshot,
+  getPlayerRegistrations
 } from '../store.ts';
 import { getSocketIO } from '../socket.ts';
+import { requireAuth, requireRoles } from '../auth.ts';
 
 export const adminRouter = Router();
 
+adminRouter.get('/registrations', requireAuth, requireRoles('super_admin'), (_req, res) => {
+  const registrations = getPlayerRegistrations();
+  res.json({ success: true, count: registrations.length, registrations });
+});
+
 // POST /api/v1/admin/matches/:id/balls
-adminRouter.post('/matches/:id/balls', (req, res) => {
+adminRouter.post('/matches/:id/balls', requireAuth, requireRoles('scorer', 'super_admin'), (req, res) => {
   const matchId = parseInt(req.params.id, 10);
   const ballInput = req.body;
 
@@ -45,7 +52,7 @@ adminRouter.post('/matches/:id/balls', (req, res) => {
 });
 
 // DELETE /api/v1/admin/matches/:id/balls/last
-adminRouter.delete('/matches/:id/balls/last', (req, res) => {
+adminRouter.delete('/matches/:id/balls/last', requireAuth, requireRoles('scorer', 'super_admin'), (req, res) => {
   const matchId = parseInt(req.params.id, 10);
   const updatedState = undoLastScoredBall(matchId);
 
@@ -73,7 +80,7 @@ adminRouter.delete('/matches/:id/balls/last', (req, res) => {
 });
 
 // POST /api/v1/admin/matches/:id/swap-strike
-adminRouter.post('/matches/:id/swap-strike', (req, res) => {
+adminRouter.post('/matches/:id/swap-strike', requireAuth, requireRoles('scorer', 'super_admin'), (req, res) => {
   const matchId = parseInt(req.params.id, 10);
   const updatedState = swapMatchStrike(matchId);
 
@@ -86,7 +93,7 @@ adminRouter.post('/matches/:id/swap-strike', (req, res) => {
 });
 
 // POST /api/v1/admin/matches/:id/next-bowler
-adminRouter.post('/matches/:id/next-bowler', (req, res) => {
+adminRouter.post('/matches/:id/next-bowler', requireAuth, requireRoles('scorer', 'super_admin'), (req, res) => {
   const matchId = parseInt(req.params.id, 10);
   const { bowlerId } = req.body;
   const updatedState = setMatchBowler(matchId, parseInt(bowlerId, 10));

@@ -1,4 +1,13 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
+import {
+  issuePlayerToken,
+  requireAuth,
+  requirePlayerAuth,
+  requirePlayerOwnership,
+  requireRoles
+} from '../auth.ts';
+import { getPlayerPasswordHash, setPlayerPasswordHash } from '../playerCredentials.ts';
 import {
   getHomeData,
   getMatchLive,
@@ -102,7 +111,7 @@ matchesRouter.get('/players/registrations', (req, res) => {
 });
 
 // POST /api/v1/players/register
-matchesRouter.post('/players/register', (req, res) => {
+matchesRouter.post('/players/register', async (req, res) => {
   try {
     const {
       fullName,
@@ -115,20 +124,30 @@ matchesRouter.post('/players/register', (req, res) => {
       role,
       paymentMethod,
       paymentScreenshotUrl,
-      amountPaid
+      amountPaid,
+      password
     } = req.body;
 
-    if (!fullName || !email || !mobileNumber || !tshirtSize || !pantSize || !role || !paymentMethod) {
+    if (typeof fullName !== 'string' || !fullName.trim() || fullName.length > 100
+      || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255
+      || typeof mobileNumber !== 'string' || !mobileNumber.trim()
+      || !tshirtSize || !pantSize || !role || !paymentMethod
+      || typeof password !== 'string' || password.length < 12 || Buffer.byteLength(password, 'utf8') > 72) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required registration fields (Full Name, Address, Email, Mobile, T-Shirt Size, Pant Size, Role, Payment Method).'
+        message: 'Complete all required fields and choose a password between 12 and 72 bytes.'
       });
     }
 
+    if (getPlayerRegistrations().some((registration) => registration.email.toLowerCase() === email.trim().toLowerCase())) {
+      return res.status(409).json({ success: false, message: 'An account already uses this email.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
     const registration = registerNewPlayer({
       fullName,
       address: address || 'India',
-      email,
+      email: email.trim().toLowerCase(),
       mobileNumber,
       photoUrl,
       tshirtSize,
@@ -138,11 +157,13 @@ matchesRouter.post('/players/register', (req, res) => {
       paymentScreenshotUrl,
       amountPaid: amountPaid ? Number(amountPaid) : 2500
     });
+    setPlayerPasswordHash(registration.id, passwordHash);
 
     res.status(201).json({
       success: true,
       message: 'Player registered successfully with 1-Year Membership!',
-      registration
+      registration,
+      token: issuePlayerToken(registration.id)
     });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -150,7 +171,7 @@ matchesRouter.post('/players/register', (req, res) => {
 });
 
 // PATCH /api/v1/players/registrations/:id/status
-matchesRouter.patch('/players/registrations/:id/status', (req, res) => {
+matchesRouter.patch('/players/registrations/:id/status', requireAuth, requireRoles('super_admin'), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { status } = req.body;
   const updated = updatePlayerPaymentStatus(id, status);
@@ -161,36 +182,39 @@ matchesRouter.patch('/players/registrations/:id/status', (req, res) => {
 });
 
 // POST /api/v1/players/login
-matchesRouter.post('/players/login', (req, res) => {
+matchesRouter.post('/players/login', async (req, res) => {
   try {
-    const { identifier } = req.body;
-    if (!identifier || typeof identifier !== 'string') {
+    const { identifier, password } = req.body;
+    if (typeof identifier !== 'string' || !identifier.trim()
+      || typeof password !== 'string' || !password || Buffer.byteLength(password, 'utf8') > 72) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide a valid Membership ID, Email, or Mobile Number.'
+        message: 'Enter your Membership ID, email, or mobile number and password.'
       });
     }
 
     const player = findPlayerForLogin(identifier);
-    if (!player) {
-      return res.status(404).json({
+    const passwordHash = player ? getPlayerPasswordHash(player.id) : undefined;
+    if (!player || !passwordHash || !(await bcrypt.compare(password, passwordHash))) {
+      return res.status(401).json({
         success: false,
-        message: `No registered player found matching "${identifier}". Please check your details or Register as a New Player.`
+        message: 'Player login details are incorrect. Check your details or register a player account.'
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       message: `Welcome back, ${player.fullName}!`,
-      player
+      player,
+      token: issuePlayerToken(player.id)
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: err.message });
   }
 });
 
 // GET /api/v1/players/profile/:id
-matchesRouter.get('/players/profile/:id', (req, res) => {
+matchesRouter.get('/players/profile/:id', requirePlayerAuth, requirePlayerOwnership, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const all = getPlayerRegistrations();
   const player = all.find((p) => p.id === id);
@@ -201,7 +225,7 @@ matchesRouter.get('/players/profile/:id', (req, res) => {
 });
 
 // POST /api/v1/players/renew/:id
-matchesRouter.post('/players/renew/:id', (req, res) => {
+matchesRouter.post('/players/renew/:id', requirePlayerAuth, requirePlayerOwnership, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const renewed = renewPlayerSubscription(id);
   if (!renewed) {

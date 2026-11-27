@@ -50,6 +50,7 @@ export interface PlayerRegistration {
 
 interface PlayerProfilePageProps {
   player: PlayerRegistration;
+  sessionToken: string;
   onLogout: () => void;
   onNavigateToMatchCentre: () => void;
   onPlayerUpdated: (updated: PlayerRegistration) => void;
@@ -59,6 +60,7 @@ const API_BASE = 'http://localhost:4000/api/v1';
 
 export default function PlayerProfilePage({
   player,
+  sessionToken,
   onLogout,
   onNavigateToMatchCentre,
   onPlayerUpdated
@@ -80,7 +82,8 @@ export default function PlayerProfilePage({
     try {
       setRenewing(true);
       const res = await fetch(`${API_BASE}/players/renew/${player.id}`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { Authorization: `Bearer ${sessionToken}` }
       });
       const data = await res.json();
       if (res.ok && data.success && data.player) {

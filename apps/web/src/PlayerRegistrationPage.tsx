@@ -46,7 +46,7 @@ interface PlayerRegistration {
 }
 
 interface PlayerRegistrationPageProps {
-  onRegisteredLogin?: (player: PlayerRegistration) => void;
+  onRegisteredLogin?: (player: PlayerRegistration, token: string) => void;
 }
 
 const API_BASE = 'http://localhost:4000/api/v1';
@@ -69,8 +69,11 @@ export default function PlayerRegistrationPage({ onRegisteredLogin }: PlayerRegi
   const [role, setRole] = useState<'Batsman' | 'Bowler' | 'Allrounder' | 'Wicket-Keeper'>('Batsman');
   const [paymentMethod, setPaymentMethod] = useState('UPI (GPay / PhonePe / Paytm)');
   const [paymentScreenshotUrl, setPaymentScreenshotUrl] = useState('https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=500&auto=format&fit=crop');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   
   const [submitSuccess, setSubmitSuccess] = useState<PlayerRegistration | null>(null);
+  const [registrationToken, setRegistrationToken] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
   // Fetch registrations from API
@@ -126,6 +129,14 @@ export default function PlayerRegistrationPage({ onRegisteredLogin }: PlayerRegi
       setErrorMessage('Please fill in all mandatory fields.');
       return;
     }
+    if (password.length < 12 || new TextEncoder().encode(password).length > 72) {
+      setErrorMessage('Choose a password between 12 and 72 bytes.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorMessage('Passwords do not match.');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -143,19 +154,23 @@ export default function PlayerRegistrationPage({ onRegisteredLogin }: PlayerRegi
           role,
           paymentMethod,
           paymentScreenshotUrl,
-          amountPaid: 2500
+          amountPaid: 2500,
+          password
         })
       });
 
       const data = await res.json();
       if (res.ok && data.success) {
         setSubmitSuccess(data.registration);
+        setRegistrationToken(data.token);
         fetchRegistrations();
         // Reset form
         setFullName('');
         setAddress('');
         setEmail('');
         setMobileNumber('');
+        setPassword('');
+        setConfirmPassword('');
       } else {
         setErrorMessage(data.message || 'Registration failed');
       }
@@ -374,6 +389,39 @@ export default function PlayerRegistrationPage({ onRegisteredLogin }: PlayerRegi
                       color: '#0f172a',
                       outline: 'none'
                     }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Create Password (12+ characters) *
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={12}
+                    maxLength={72}
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', fontSize: '0.875rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Confirm Password *
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={12}
+                    maxLength={72}
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', fontSize: '0.875rem', boxSizing: 'border-box' }}
                   />
                 </div>
               </div>
@@ -794,9 +842,9 @@ export default function PlayerRegistrationPage({ onRegisteredLogin }: PlayerRegi
               >
                 + Register Another Player
               </button>
-              {onRegisteredLogin && (
+              {onRegisteredLogin && registrationToken && (
                 <button
-                  onClick={() => onRegisteredLogin(submitSuccess)}
+                  onClick={() => onRegisteredLogin(submitSuccess, registrationToken)}
                   style={{
                     backgroundColor: '#10b981',
                     color: '#ffffff',

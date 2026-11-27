@@ -91,4 +91,8 @@ When scoring in the Scorer Panel (`http://localhost:5173`), you can use keyboard
 - `N` &rarr; No Ball (+1 extra run, Free Hit indicator)
 - `S` &rarr; Swap Strike manually
 - `U` &rarr; Undo last delivery (recalculates entire innings)
-#
+## 🔐 Scorer Desk Login
+
+The first development super-admin login is `admin@cricket.local` / `Password123!`. On API startup, the auth table is created if needed and this account is bootstrapped only if no super-admin exists. Sign in at `http://localhost:5173`; the super-admin overview lets you create scorer logins with a name, email, and password. Scorers sign in with those credentials. Players create their own password during registration and use it with their membership ID, email, or mobile number. Fans can browse the public site without an account.
+
+Set `AUTH_SECRET`, `BOOTSTRAP_ADMIN_EMAIL`, and `BOOTSTRAP_ADMIN_PASSWORD` in the API environment before deploying. Production does not use the development bootstrap credentials.

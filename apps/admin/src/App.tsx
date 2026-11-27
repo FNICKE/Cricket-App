@@ -13,7 +13,8 @@ import {
   Send,
   Radio,
   ExternalLink,
-  UserCheck
+  LogOut,
+  RefreshCw
 } from 'lucide-react';
 
 interface BattingScore {
@@ -101,11 +102,145 @@ interface CommentaryItem {
 
 const API_BASE = 'http://localhost:4000/api/v1';
 
+type AdminRole = 'super_admin' | 'scorer';
+
+interface AdminUser {
+  id: number;
+  email: string;
+  fullName: string;
+  role: AdminRole;
+}
+
+interface AdminSession {
+  token: string;
+  user: AdminUser;
+}
+
+interface AdminOverview {
+  matches: Array<{
+    matchId: number;
+    series: string;
+    matchNo: string;
+    status: string;
+    statusNote?: string;
+    teamA: { shortName: string; score: string };
+    teamB: { shortName: string; score: string };
+  }>;
+  scorers: Array<{
+    id: number;
+    email: string;
+    fullName: string;
+    role: string;
+    isActive: boolean;
+    createdAt: string;
+  }>;
+  registrations: { total: number; paid: number; pending: number; expired: number };
+}
+
+function LoginPage({ onLogin }: { onLogin: (session: AdminSession) => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const submitLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/admin/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.message || 'Sign in failed.');
+        return;
+      }
+      sessionStorage.setItem('scorerDeskToken', data.token);
+      onLogin({ token: data.token, user: data.user });
+    } catch {
+      setError('Could not connect to the scorer service.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '24px', background: '#f8fafc' }}>
+      <form onSubmit={submitLogin} style={{ width: 'min(100%, 420px)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '32px', boxShadow: '0 20px 50px rgba(15, 23, 42, .08)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px' }}>
+          <div style={{ background: '#ecfdf5', color: '#059669', padding: '12px', borderRadius: '12px' }}><ShieldCheck size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>TASK<span style={{ color: '#10b981' }}>SCORER</span></div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Secure scorer desk sign in</div>
+          </div>
+        </div>
+        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Email</label>
+        <input required type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '12px', marginBottom: '16px', border: '1px solid #cbd5e1', borderRadius: '9px' }} />
+        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Password</label>
+        <input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '12px', marginBottom: '16px', border: '1px solid #cbd5e1', borderRadius: '9px' }} />
+        {error && <p role="alert" style={{ color: '#dc2626', fontSize: '0.8125rem' }}>{error}</p>}
+        <button disabled={submitting} type="submit" style={{ width: '100%', border: 0, borderRadius: '9px', padding: '12px', color: '#fff', background: '#059669', fontWeight: 800, cursor: submitting ? 'wait' : 'pointer' }}>
+          {submitting ? 'Signing in…' : 'Sign in'}
+        </button>
+        <p style={{ margin: '18px 0 0', fontSize: '0.75rem', lineHeight: 1.5, color: '#64748b' }}>Scorer accounts are created by a super administrator. Ask your administrator for your login.</p>
+      </form>
+    </main>
+  );
+}
+
 export default function App() {
-  const [adminView, setAdminView] = useState<'scoring' | 'registrations'>('scoring');
+  const [session, setSession] = useState<AdminSession | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    const token = sessionStorage.getItem('scorerDeskToken');
+    if (!token) {
+      setCheckingSession(false);
+      return;
+    }
+    fetch(`${API_BASE}/admin/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Session expired');
+        const data = await response.json();
+        setSession({ token, user: data.user });
+      })
+      .catch(() => sessionStorage.removeItem('scorerDeskToken'))
+      .finally(() => setCheckingSession(false));
+  }, []);
+
+  if (checkingSession) {
+    return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', color: '#64748b' }}>Checking scorer session…</main>;
+  }
+  if (!session) return <LoginPage onLogin={setSession} />;
+
+  return (
+    <ScorerDesk
+      session={session}
+      onLogout={() => {
+        sessionStorage.removeItem('scorerDeskToken');
+        setSession(null);
+      }}
+    />
+  );
+}
+
+function ScorerDesk({ session, onLogout }: { session: AdminSession; onLogout: () => void }) {
+  const [adminView, setAdminView] = useState<'scoring' | 'registrations' | 'overview'>(
+    session.user.role === 'super_admin' ? 'overview' : 'scoring'
+  );
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [loadingRegs, setLoadingRegs] = useState(false);
   const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null);
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [overviewError, setOverviewError] = useState('');
+  const [scorerName, setScorerName] = useState('');
+  const [scorerEmail, setScorerEmail] = useState('');
+  const [scorerPassword, setScorerPassword] = useState('');
+  const [scorerMessage, setScorerMessage] = useState('');
+  const authHeaders = { Authorization: `Bearer ${session.token}` };
 
   const [match, setMatch] = useState<MatchState | null>(null);
   const [commentary, setCommentary] = useState<CommentaryItem[]>([]);
@@ -144,18 +279,57 @@ export default function App() {
     }
   }, []);
 
-  const fetchRegistrations = async () => {
+  const fetchRegistrations = useCallback(async () => {
     try {
       setLoadingRegs(true);
-      const res = await fetch(`${API_BASE}/players/registrations`);
+      const res = await fetch(`${API_BASE}/admin/registrations`, { headers: authHeaders });
       if (res.ok) {
         const data = await res.json();
         setRegistrations(data.registrations || []);
+      } else {
+        const data = await res.json();
+        console.error('Could not load registrations:', data.message);
       }
     } catch (err) {
       console.warn('Error fetching registrations:', err);
     } finally {
       setLoadingRegs(false);
+    }
+  }, [session.token]);
+
+  const fetchOverview = useCallback(async () => {
+    setOverviewError('');
+    try {
+      const res = await fetch(`${API_BASE}/admin/auth/overview`, { headers: authHeaders });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Could not load the admin overview.');
+      setOverview(data);
+    } catch (err) {
+      setOverviewError(err instanceof Error ? err.message : 'Could not load the admin overview.');
+    }
+  }, [session.token]);
+
+  const createScorer = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setScorerMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/admin/auth/scorers`, {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName: scorerName, email: scorerEmail, password: scorerPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setScorerMessage(data.message || 'Could not create scorer account.');
+        return;
+      }
+      setScorerMessage(`Scorer login created for ${data.scorer.email}.`);
+      setScorerName('');
+      setScorerEmail('');
+      setScorerPassword('');
+      fetchOverview();
+    } catch {
+      setScorerMessage('Could not connect to the scorer service.');
     }
   };
 
@@ -163,11 +337,14 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/players/registrations/${id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
       });
       if (res.ok) {
         fetchRegistrations();
+      } else {
+        const data = await res.json();
+        console.error('Could not update registration:', data.message);
       }
     } catch (err) {
       console.error('Failed to update status:', err);
@@ -175,8 +352,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchRegistrations();
-  }, [adminView]);
+    if (adminView === 'registrations') fetchRegistrations();
+    if (adminView === 'overview') fetchOverview();
+  }, [adminView, fetchOverview, fetchRegistrations]);
 
   useEffect(() => {
     fetchMatchData();
@@ -238,7 +416,7 @@ export default function App() {
 
       const res = await fetch(`${API_BASE}/admin/matches/1/balls`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       if (res.ok) {
@@ -258,7 +436,8 @@ export default function App() {
     setIsSubmitting(true);
     try {
       const res = await fetch(`${API_BASE}/admin/matches/1/balls/last`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: authHeaders
       });
       if (res.ok) {
         const data = await res.json();
@@ -274,7 +453,8 @@ export default function App() {
   const swapStrike = async () => {
     try {
       const res = await fetch(`${API_BASE}/admin/matches/1/swap-strike`, {
-        method: 'POST'
+        method: 'POST',
+        headers: authHeaders
       });
       if (res.ok) {
         const data = await res.json();
@@ -289,7 +469,7 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/admin/matches/1/next-bowler`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({ bowlerId })
       });
       if (res.ok) {
@@ -416,7 +596,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Center Switcher (Scoring vs Registrations) */}
+        {/* Center switcher */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <button
             onClick={() => setAdminView('scoring')}
@@ -434,27 +614,47 @@ export default function App() {
             Live Scoring Desk
           </button>
 
-          <button
-            onClick={() => setAdminView('registrations')}
-            style={{
-              backgroundColor: adminView === 'registrations' ? '#10b981' : '#f8fafc',
-              color: adminView === 'registrations' ? '#ffffff' : '#64748b',
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-              padding: '6px 14px',
-              fontSize: '0.8125rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <span>Player Subscriptions</span>
-            <span style={{ fontSize: '0.625rem', backgroundColor: adminView === 'registrations' ? '#065f46' : '#ecfdf5', color: adminView === 'registrations' ? '#fff' : '#10b981', padding: '1px 6px', borderRadius: '4px' }}>
-              {registrations.length}
-            </span>
-          </button>
+          {session.user.role === 'super_admin' && (
+            <button
+              onClick={() => setAdminView('overview')}
+              style={{
+                backgroundColor: adminView === 'overview' ? '#10b981' : '#f8fafc',
+                color: adminView === 'overview' ? '#ffffff' : '#64748b',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '6px 14px',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Super Admin
+            </button>
+          )}
+
+          {session.user.role === 'super_admin' && (
+            <button
+              onClick={() => setAdminView('registrations')}
+              style={{
+                backgroundColor: adminView === 'registrations' ? '#10b981' : '#f8fafc',
+                color: adminView === 'registrations' ? '#ffffff' : '#64748b',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '6px 14px',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>Player Subscriptions</span>
+              <span style={{ fontSize: '0.625rem', backgroundColor: adminView === 'registrations' ? '#065f46' : '#ecfdf5', color: adminView === 'registrations' ? '#fff' : '#10b981', padding: '1px 6px', borderRadius: '4px' }}>
+                {registrations.length}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Right Status */}
@@ -501,13 +701,104 @@ export default function App() {
             <span>View Fan Portal</span>
             <ExternalLink size={13} />
           </a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 700 }}>{session.user.fullName}</span>
+            <button
+              onClick={onLogout}
+              title="Sign out"
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 9px', background: '#fff', color: '#475569', fontWeight: 700, cursor: 'pointer' }}
+            >
+              <LogOut size={14} /> Sign out
+            </button>
+          </div>
         </div>
       </header>
 
       {/* ══════════════════════════════════════════════════
           PAGE CONTENT
       ══════════════════════════════════════════════════ */}
-      {adminView === 'registrations' ? (
+      {adminView === 'overview' && session.user.role === 'super_admin' ? (
+        <main style={{ maxWidth: '1240px', margin: '0 auto', padding: 'clamp(1rem, 2.5vw, 1.75rem) clamp(0.75rem, 3.5vw, 2rem)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#10b981', textTransform: 'uppercase' }}>SUPER ADMINISTRATION</span>
+              <h1 style={{ fontSize: '1.5rem', fontWeight: 900, margin: '4px 0', color: '#0f172a' }}>Platform status</h1>
+              <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: 0 }}>Review match and scorer-account status, and create scorer logins.</p>
+            </div>
+            <button onClick={fetchOverview} style={{ display: 'flex', alignItems: 'center', gap: '7px', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '9px 13px', fontWeight: 700, cursor: 'pointer' }}>
+              <RefreshCw size={14} /> Refresh
+            </button>
+          </div>
+
+          {overviewError && <p role="alert" style={{ color: '#dc2626', background: '#fef2f2', padding: '12px', borderRadius: '8px' }}>{overviewError}</p>}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+            {[
+              { label: 'Scorer accounts', value: overview?.scorers.length ?? '—' },
+              { label: 'Registered players', value: overview?.registrations.total ?? '—' },
+              { label: 'Paid registrations', value: overview?.registrations.paid ?? '—' },
+              { label: 'Pending registrations', value: overview?.registrations.pending ?? '—' },
+              { label: 'Expired memberships', value: overview?.registrations.expired ?? '—' }
+            ].map((item) => (
+              <div key={item.label} className="tv-card" style={{ padding: '16px' }}>
+                <p style={{ fontSize: '0.6875rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', margin: '0 0 8px' }}>{item.label}</p>
+                <p style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>{item.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <section className="tv-card" style={{ padding: '20px', marginBottom: '20px' }}>
+            <h2 style={{ fontSize: '1rem', margin: '0 0 14px', color: '#0f172a' }}>Match status</h2>
+            {overview?.matches.length ? (
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {overview.matches.map((item) => (
+                  <div key={item.matchId} style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1fr) minmax(160px, 1fr) auto', alignItems: 'center', gap: '14px', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px' }}>
+                    <div>
+                      <strong style={{ color: '#0f172a' }}>{item.matchNo}</strong>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>{item.series}</div>
+                    </div>
+                    <div style={{ fontSize: '0.8125rem', color: '#334155' }}>{item.teamA.shortName} {item.teamA.score} &nbsp;·&nbsp; {item.teamB.shortName} {item.teamB.score}</div>
+                    <span style={{ background: item.status.toLowerCase() === 'live' ? '#dcfce7' : '#f1f5f9', color: item.status.toLowerCase() === 'live' ? '#15803d' : '#475569', borderRadius: '999px', padding: '5px 10px', fontSize: '0.6875rem', fontWeight: 800, textTransform: 'uppercase' }}>{item.status}</span>
+                    {item.statusNote && <div style={{ gridColumn: '1 / -1', fontSize: '0.75rem', color: '#64748b' }}>{item.statusNote}</div>}
+                  </div>
+                ))}
+              </div>
+            ) : <p style={{ color: '#64748b' }}>Loading match statuses…</p>}
+          </section>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 0.9fr) minmax(380px, 1.1fr)', gap: '20px', alignItems: 'start' }}>
+            <form onSubmit={createScorer} className="tv-card" style={{ padding: '20px', display: 'grid', gap: '10px' }}>
+              <h2 style={{ fontSize: '1rem', margin: '0 0 4px', color: '#0f172a' }}>Create scorer login</h2>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Full name</label>
+              <input required value={scorerName} onChange={(event) => setScorerName(event.target.value)} style={{ padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px' }} />
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Email</label>
+              <input required type="email" value={scorerEmail} onChange={(event) => setScorerEmail(event.target.value)} style={{ padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px' }} />
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Temporary password (minimum 12 characters)</label>
+              <input required minLength={12} type="password" value={scorerPassword} onChange={(event) => setScorerPassword(event.target.value)} style={{ padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px' }} />
+              <button type="submit" style={{ background: '#059669', color: '#fff', border: 0, borderRadius: '8px', padding: '11px', fontWeight: 800, cursor: 'pointer' }}>Create scorer account</button>
+              {scorerMessage && <p role="status" style={{ color: scorerMessage.startsWith('Scorer login') ? '#047857' : '#dc2626', fontSize: '0.75rem', margin: 0 }}>{scorerMessage}</p>}
+            </form>
+
+            <section className="tv-card" style={{ padding: '20px' }}>
+              <h2 style={{ fontSize: '1rem', margin: '0 0 14px', color: '#0f172a' }}>Scorer accounts</h2>
+              {!overview ? <p style={{ color: '#64748b' }}>Loading scorer accounts…</p> : overview.scorers.length === 0 ? <p style={{ color: '#64748b' }}>No scorer logins created yet.</p> : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem', textAlign: 'left' }}>
+                    <thead><tr style={{ color: '#64748b' }}><th style={{ padding: '9px' }}>Scorer</th><th style={{ padding: '9px' }}>Email</th><th style={{ padding: '9px' }}>Status</th></tr></thead>
+                    <tbody>{overview.scorers.map((scorer) => (
+                      <tr key={scorer.id} style={{ borderTop: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '10px 9px', fontWeight: 700 }}>{scorer.fullName}</td>
+                        <td style={{ padding: '10px 9px' }}>{scorer.email}</td>
+                        <td style={{ padding: '10px 9px', color: scorer.isActive ? '#047857' : '#dc2626', fontWeight: 700 }}>{scorer.isActive ? 'Active' : 'Disabled'}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
+        </main>
+      ) : adminView === 'registrations' && session.user.role === 'super_admin' ? (
         <main style={{ maxWidth: '1240px', margin: '0 auto', padding: 'clamp(1rem, 2.5vw, 1.75rem) clamp(0.75rem, 3.5vw, 2rem)' }}>
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>

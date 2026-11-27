@@ -9,11 +9,12 @@
     "dev": "node --experimental-strip-types --watch-path=src --watch src/server.ts"
   },
   "dependencies": {
-    "express": "^4.19.2",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "socket.io": "^4.7.5",
+    "express": "^4.19.2",
     "pg": "^8.11.5",
+    "socket.io": "^4.7.5",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

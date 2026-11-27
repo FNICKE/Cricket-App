@@ -152,26 +152,77 @@ type PageName =
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<PageName>('match-centre');
-  const [loggedInPlayer, setLoggedInPlayer] = useState<PlayerRegistration | null>(() => {
+  const [loggedInPlayer, setLoggedInPlayer] = useState<PlayerRegistration | null>(null);
+  const [playerToken, setPlayerToken] = useState<string | null>(() => {
     try {
-      const saved = localStorage.getItem('cricverse_player');
-      return saved ? JSON.parse(saved) : null;
+      return localStorage.getItem('cricverse_player_token');
     } catch {
       return null;
     }
   });
 
-  const handleLoginSuccess = (player: PlayerRegistration) => {
-    setLoggedInPlayer(player);
+  useEffect(() => {
+    if (!playerToken) return;
+    let playerId: string | null;
     try {
-      localStorage.setItem('cricverse_player', JSON.stringify(player));
+      playerId = localStorage.getItem('cricverse_player_id');
+    } catch {
+      setPlayerToken(null);
+      return;
+    }
+    if (!playerId) {
+      try {
+        localStorage.removeItem('cricverse_player_token');
+      } catch {}
+      setPlayerToken(null);
+      return;
+    }
+
+    let active = true;
+    fetch(`${API_BASE}/players/profile/${playerId}`, {
+      headers: { Authorization: `Bearer ${playerToken}` }
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Player session expired.');
+        return response.json();
+      })
+      .then((data) => {
+        if (active) {
+          setLoggedInPlayer(data.player);
+          setCurrentPage('profile');
+        }
+      })
+      .catch(() => {
+        if (active) {
+          try {
+            localStorage.removeItem('cricverse_player_token');
+            localStorage.removeItem('cricverse_player_id');
+          } catch {}
+          setPlayerToken(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [playerToken]);
+
+  const handleLoginSuccess = (player: PlayerRegistration, token: string) => {
+    setLoggedInPlayer(player);
+    setPlayerToken(token);
+    try {
+      localStorage.setItem('cricverse_player_token', token);
+      localStorage.setItem('cricverse_player_id', String(player.id));
     } catch {}
     setCurrentPage('profile');
   };
 
   const handleLogout = () => {
     setLoggedInPlayer(null);
+    setPlayerToken(null);
     try {
+      localStorage.removeItem('cricverse_player_token');
+      localStorage.removeItem('cricverse_player_id');
       localStorage.removeItem('cricverse_player');
     } catch {}
     setCurrentPage('match-centre');
@@ -179,9 +230,6 @@ export default function App() {
 
   const handlePlayerUpdated = (updated: PlayerRegistration) => {
     setLoggedInPlayer(updated);
-    try {
-      localStorage.setItem('cricverse_player', JSON.stringify(updated));
-    } catch {}
   };
   const [match, setMatch] = useState<MatchState | null>(null);
   const [commentary, setCommentary] = useState<CommentaryItem[]>([]);
@@ -591,6 +639,7 @@ export default function App() {
       ) : currentPage === 'profile' && loggedInPlayer ? (
         <PlayerProfilePage
           player={loggedInPlayer}
+          sessionToken={playerToken || ''}
           onLogout={handleLogout}
           onNavigateToMatchCentre={() => setCurrentPage('match-centre')}
           onPlayerUpdated={handlePlayerUpdated}

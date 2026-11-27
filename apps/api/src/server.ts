@@ -8,6 +8,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { matchesRouter } from './routes/matches.ts';
 import { adminRouter } from './routes/admin.ts';
+import { adminAuthRouter, initializeAdminAuth } from './routes/adminAuth.ts';
 import { initSocketIO } from './socket.ts';
 import { checkDatabaseConnection } from './db.ts';
 
@@ -22,6 +23,7 @@ app.use(express.json());
 
 // API Routes
 app.use('/api/v1', matchesRouter);
+app.use('/api/v1/admin/auth', adminAuthRouter);
 app.use('/api/v1/admin', adminRouter);
 
 // Health check endpoint
@@ -43,5 +45,11 @@ server.listen(PORT, async () => {
   console.log(`[API] Socket.IO real-time engine ready.`);
   console.log(`[API] All 10 Pages & Village League API Ready.`);
   // Attempt to check PostgreSQL connection
-  await checkDatabaseConnection();
+  if (await checkDatabaseConnection()) {
+    try {
+      await initializeAdminAuth();
+    } catch (error) {
+      console.error('[Auth] Could not initialize admin accounts:', error);
+    }
+  }
 });
